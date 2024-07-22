@@ -28,7 +28,7 @@ public class WeaponMaster : RoleBase
 
     /*
      * 0 = Kill (Sword) ~ Normal Kill
-     * 1 = EHRN Werewolf Kill / Higher KCD (Axe)
+     * 1 = TOHEN Werewolf Kill / Higher KCD (Axe)
      * 2 = Reach + Swift / Can't Vent (Lance)
      * 3 = 1-Time Shield / Can't Kill (Shield)
      */
@@ -36,13 +36,18 @@ public class WeaponMaster : RoleBase
     public static void SetupCustomOption()
     {
         SetupSingleRoleOptions(Id, TabGroup.NeutralRoles, CustomRoles.WeaponMaster);
-        KillCooldown = new FloatOptionItem(Id + 10, "KillCooldown", new(0f, 180f, 0.5f), 22.5f, TabGroup.NeutralRoles).SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster])
+        KillCooldown = new FloatOptionItem(Id + 10, "KillCooldown", new(0f, 180f, 0.5f), 22.5f, TabGroup.NeutralRoles)
+            .SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster])
             .SetValueFormat(OptionFormat.Seconds);
-        CanVent = new BooleanOptionItem(Id + 11, "CanVent", true, TabGroup.NeutralRoles).SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster]);
-        HasImpostorVision = new BooleanOptionItem(Id + 13, "ImpostorVision", true, TabGroup.NeutralRoles).SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster]);
-        Radius = new FloatOptionItem(Id + 12, "WMRadius", new(0f, 10f, 0.25f), 2f, TabGroup.NeutralRoles).SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster])
+        CanVent = new BooleanOptionItem(Id + 11, "CanVent", true, TabGroup.NeutralRoles)
+            .SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster]);
+        HasImpostorVision = new BooleanOptionItem(Id + 13, "ImpostorVision", true, TabGroup.NeutralRoles)
+            .SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster]);
+        Radius = new FloatOptionItem(Id + 12, "WMRadius", new(0f, 10f, 0.1f), 2f, TabGroup.NeutralRoles)
+            .SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster])
             .SetValueFormat(OptionFormat.Multiplier);
-        HighKCD = new FloatOptionItem(Id + 14, "GamblerHighKCD", new(0f, 180f, 2.5f), 35f, TabGroup.NeutralRoles).SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster])
+        HighKCD = new FloatOptionItem(Id + 14, "GamblerHighKCD", new(0f, 180f, 2.5f), 35f, TabGroup.NeutralRoles)
+            .SetParent(CustomRoleSpawnChances[CustomRoles.WeaponMaster])
             .SetValueFormat(OptionFormat.Seconds);
     }
 
@@ -92,6 +97,8 @@ public class WeaponMaster : RoleBase
         opt.SetVision(HasImpostorVision.GetBool());
         if (UsePhantomBasis.GetBool() && UsePhantomBasisForNKs.GetBool())
             AURoleOptions.PhantomCooldown = 1f;
+        if (UsePhantomBasis.GetBool() && UsePhantomBasisForNKs.GetBool())
+            AURoleOptions.ShapeshifterCooldown = 1f;
     }
 
     public override bool CanUseKillButton(PlayerControl pc) => Mode != 3;
@@ -109,6 +116,13 @@ public class WeaponMaster : RoleBase
 
     public override bool OnVanish(PlayerControl pc)
     {
+        SwitchMode();
+        return false;
+    }
+
+    public override bool OnShapeshift(PlayerControl shapeshifter, PlayerControl target, bool shapeshifting)
+    {
+        if (!shapeshifting && !UseUnshiftTrigger.GetBool()) return true;
         SwitchMode();
         return false;
     }

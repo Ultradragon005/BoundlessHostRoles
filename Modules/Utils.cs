@@ -653,6 +653,7 @@ public static class Utils
             case CustomRoles.Eclipse:
             case CustomRoles.Pyromaniac:
             case CustomRoles.NSerialKiller:
+            case CustomRoles.Beehive:
             case CustomRoles.RouleteGrandeur:
             case CustomRoles.Nonplus:
             case CustomRoles.Tremor:
@@ -865,7 +866,6 @@ public static class Utils
 
     public static string GetProgressText(PlayerControl pc)
     {
-        if (!Main.PlayerVersion.ContainsKey(Main.HostClientId)) return string.Empty;
         var taskState = pc.GetTaskState();
         var Comms = false;
         if (taskState.hasTasks)
@@ -880,8 +880,6 @@ public static class Utils
 
     public static string GetProgressText(byte playerId, bool comms = false)
     {
-        if (!Main.PlayerVersion.ContainsKey(Main.HostClientId)) return string.Empty;
-
         switch (Options.CurrentGameMode)
         {
             case CustomGameMode.MoveAndStop: return GetTaskCount(playerId, comms, moveAndStop: true);
@@ -1255,11 +1253,18 @@ public static class Utils
         sb.Append("<#ffffff><u>Role Summary:</u></color><size=70%>");
 
         List<byte> cloneRoles = [.. Main.PlayerStates.Keys];
-        foreach (byte id in Main.WinnerList.ToArray())
+        foreach (byte id in Main.WinnerList)
         {
-            if (EndGamePatch.SummaryText[id].Contains("<INVALID:NotAssigned>")) continue;
-            sb.Append("\n<#c4aa02>\u2605</color> ").Append(EndGamePatch.SummaryText[id] /*.RemoveHtmlTags()*/);
-            cloneRoles.Remove(id);
+            try
+            {
+                if (EndGamePatch.SummaryText[id].Contains("<INVALID:NotAssigned>")) continue;
+                sb.Append("\n<#c4aa02>\u2605</color> ").Append(EndGamePatch.SummaryText[id] /*.RemoveHtmlTags()*/);
+                cloneRoles.Remove(id);
+            }
+            catch (Exception ex)
+            {
+                ThrowException(ex);
+            }
         }
 
         switch (Options.CurrentGameMode)
@@ -1271,7 +1276,14 @@ public static class Utils
                 list.Sort();
                 foreach ((int, byte) id in list)
                 {
-                    sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id.Item2]);
+                    try
+                    {
+                        sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id.Item2]);
+                    }
+                    catch (Exception ex)
+                    {
+                        ThrowException(ex);
+                    }
                 }
 
                 break;
@@ -1282,7 +1294,14 @@ public static class Utils
                 list2.Sort();
                 foreach ((int, byte) id in list2)
                 {
-                    sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id.Item2]);
+                    try
+                    {
+                        sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id.Item2]);
+                    }
+                    catch (Exception ex)
+                    {
+                        ThrowException(ex);
+                    }
                 }
 
                 break;
@@ -1293,7 +1312,14 @@ public static class Utils
                 list3.Sort();
                 foreach ((int, byte) id in list3)
                 {
-                    sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id.Item2]);
+                    try
+                    {
+                        sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id.Item2]);
+                    }
+                    catch (Exception ex)
+                    {
+                        ThrowException(ex);
+                    }
                 }
 
                 break;
@@ -1302,15 +1328,29 @@ public static class Utils
             case CustomGameMode.HideAndSeek:
                 foreach (byte id in cloneRoles)
                 {
-                    sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id]);
+                    try
+                    {
+                        sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id]);
+                    }
+                    catch (Exception ex)
+                    {
+                        ThrowException(ex);
+                    }
                 }
 
                 break;
             default:
                 foreach (byte id in cloneRoles)
                 {
-                    if (EndGamePatch.SummaryText[id].Contains("<INVALID:NotAssigned>")) continue;
-                    sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id]);
+                    try
+                    {
+                        if (EndGamePatch.SummaryText[id].Contains("<INVALID:NotAssigned>")) continue;
+                        sb.Append("\n\u3000 ").Append(EndGamePatch.SummaryText[id]);
+                    }
+                    catch (Exception ex)
+                    {
+                        ThrowException(ex);
+                    }
                 }
 
                 break;
@@ -1502,7 +1542,7 @@ public static class Utils
 
     public static void CheckAndSpawnAdditionalRefugee(NetworkedPlayerInfo deadPlayer)
     {
-        if (Options.CurrentGameMode != CustomGameMode.Standard || deadPlayer == null || deadPlayer.Object.Is(CustomRoles.Refugee) || !Options.SpawnAdditionalRefugeeOnImpsDead.GetBool() || Main.AllAlivePlayerControls.Length < Options.SpawnAdditionalRefugeeMinAlivePlayers.GetInt() || CustomRoles.Refugee.RoleExist(countDead: true) || Main.AllAlivePlayerControls == null || Main.AllAlivePlayerControls.Length == 0 || Main.AllAlivePlayerControls.Any(x => x.PlayerId != deadPlayer.PlayerId && (x.Is(CustomRoleTypes.Impostor) || (x.IsNeutralKiller() && !Options.SpawnAdditionalRefugeeWhenNKAlive.GetBool())))) return;
+        if (Options.CurrentGameMode != CustomGameMode.Standard || deadPlayer == null || deadPlayer.Object.Is(CustomRoles.Refugee) || Main.HasJustStarted || !GameStates.InGame || !Options.SpawnAdditionalRefugeeOnImpsDead.GetBool() || Main.AllAlivePlayerControls.Length < Options.SpawnAdditionalRefugeeMinAlivePlayers.GetInt() || CustomRoles.Refugee.RoleExist(countDead: true) || Main.AllAlivePlayerControls == null || Main.AllAlivePlayerControls.Length == 0 || Main.AllAlivePlayerControls.Any(x => x.PlayerId != deadPlayer.PlayerId && (x.Is(CustomRoleTypes.Impostor) || (x.IsNeutralKiller() && !Options.SpawnAdditionalRefugeeWhenNKAlive.GetBool())))) return;
 
         PlayerControl[] ListToChooseFrom = Options.UsePets.GetBool() ? Main.AllAlivePlayerControls.Where(x => x.PlayerId != deadPlayer.PlayerId && x.Is(CustomRoleTypes.Crewmate) && !x.Is(CustomRoles.Loyal)).ToArray() : Main.AllAlivePlayerControls.Where(x => x.PlayerId != deadPlayer.PlayerId && x.Is(CustomRoleTypes.Crewmate) && x.GetCustomRole().GetRoleTypes() == RoleTypes.Impostor && !x.Is(CustomRoles.Loyal)).ToArray();
 
@@ -1539,6 +1579,13 @@ public static class Utils
     {
         if (!AmongUsClient.Instance.AmHost) return;
         if (title == "") title = "<color=#8b32a8>" + GetString("DefaultSystemMessageTitle") + "</color>";
+        if (title.Count(x => x == '\u2605') == 2 && !title.Contains('\n'))
+        {
+            if (title.Contains('<') && title.Contains('>') && title.Contains('#'))
+                title = $"{title[..(title.IndexOf('>') + 1)]}\u27a1{title.Replace("\u2605", "")[..(title.LastIndexOf('<') - 2)]}\u2b05";
+            else title = "\u27a1" + title.Replace("\u2605", "") + "\u2b05";
+        }
+
         text = text.Replace("color=", string.Empty);
 
         if (text.Length >= 1200 && !noSplit)
@@ -1792,6 +1839,8 @@ public static class Utils
 
                     Main.PlayerStates.Values.Do(x => SelfSuffix.Append(x.Role.GetSuffix(seer, seer, isMeeting: isForMeeting)));
 
+                    SelfSuffix.Append(Spurt.GetSuffix(seer));
+
                     SelfSuffix.Append(CustomTeamManager.GetSuffix(seer));
 
                     if (!isForMeeting)
@@ -1975,6 +2024,7 @@ public static class Utils
                                 TargetMark.Append(ColorString(GetRoleColor(CustomRoles.BallLightning), "■"));
 
                             TargetMark.Append(Snitch.GetWarningMark(seer, target));
+                            TargetMark.Append(Marshall.GetWarningMark(seer, target));
 
                             if ((seer.Data.IsDead || Main.LoversPlayers.Any(x => x.PlayerId == seer.PlayerId)) && Main.LoversPlayers.Any(x => x.PlayerId == target.PlayerId))
                             {
@@ -2222,7 +2272,58 @@ public static class Utils
         Main.Instance.StartCoroutine(GameOptionsSender.SendAllGameOptionsAsync());
     }
 
-    public static string GetGameStateData()
+    public static void RpcChangeSkin(PlayerControl pc, NetworkedPlayerInfo.PlayerOutfit newOutfit)
+    {
+        var sender = CustomRpcSender.Create(name: $"Utils.RpcChangeSkin({pc.Data.PlayerName})");
+
+        pc.SetName(newOutfit.PlayerName);
+        sender.AutoStartRpc(pc.NetId, (byte)RpcCalls.SetName)
+            .Write(pc.Data.NetId)
+            .Write(newOutfit.PlayerName)
+            .EndRpc();
+
+        Main.AllPlayerNames[pc.PlayerId] = newOutfit.PlayerName;
+
+        pc.SetColor(newOutfit.ColorId);
+        sender.AutoStartRpc(pc.NetId, (byte)RpcCalls.SetColor)
+            .Write(pc.Data.NetId)
+            .Write((byte)newOutfit.ColorId)
+            .EndRpc();
+
+        pc.SetHat(newOutfit.HatId, newOutfit.ColorId);
+        sender.AutoStartRpc(pc.NetId, (byte)RpcCalls.SetHatStr)
+            .Write(newOutfit.HatId)
+            .Write(pc.GetNextRpcSequenceId(RpcCalls.SetHatStr))
+            .EndRpc();
+
+        pc.SetSkin(newOutfit.SkinId, newOutfit.ColorId);
+        sender.AutoStartRpc(pc.NetId, (byte)RpcCalls.SetSkinStr)
+            .Write(newOutfit.SkinId)
+            .Write(pc.GetNextRpcSequenceId(RpcCalls.SetSkinStr))
+            .EndRpc();
+
+        pc.SetVisor(newOutfit.VisorId, newOutfit.ColorId);
+        sender.AutoStartRpc(pc.NetId, (byte)RpcCalls.SetVisorStr)
+            .Write(newOutfit.VisorId)
+            .Write(pc.GetNextRpcSequenceId(RpcCalls.SetVisorStr))
+            .EndRpc();
+
+        pc.SetPet(newOutfit.PetId);
+        sender.AutoStartRpc(pc.NetId, (byte)RpcCalls.SetPetStr)
+            .Write(newOutfit.PetId)
+            .Write(pc.GetNextRpcSequenceId(RpcCalls.SetPetStr))
+            .EndRpc();
+
+        pc.SetNamePlate(newOutfit.NamePlateId);
+        sender.AutoStartRpc(pc.NetId, (byte)RpcCalls.SetNamePlateStr)
+            .Write(newOutfit.NamePlateId)
+            .Write(pc.GetNextRpcSequenceId(RpcCalls.SetNamePlateStr))
+            .EndRpc();
+
+        sender.SendMessage();
+    }
+
+    public static string GetGameStateData(bool clairvoyant = false)
     {
         var nums = Enum.GetValues<Options.GameStateInfo>().ToDictionary(x => x, _ => 0);
 
@@ -2252,8 +2353,10 @@ public static class Utils
         // 24: Romantic exists, has picked a partner who is alive, and Romantic is alive
 
         var sb = new StringBuilder();
+        var checkDict = clairvoyant ? Clairvoyant.Settings : Options.GameStateSettings;
+        nums[Options.GameStateInfo.Tasks] = GameData.Instance.CompletedTasks;
         var states = nums.ToDictionary(x => x.Key, x => x.Key == Options.GameStateInfo.RomanticState ? GetString($"GSRomanticState.{x.Value}") : (object)x.Value);
-        states.DoIf(x => Options.GameStateSettings[x.Key].GetBool(), x => sb.AppendLine(string.Format(GetString($"GSInfo.{x.Key}"), x.Value)));
+        states.DoIf(x => checkDict[x.Key].GetBool(), x => sb.AppendLine(string.Format(GetString($"GSInfo.{x.Key}"), x.Value)));
         return sb.ToString().TrimEnd();
     }
 
@@ -2277,6 +2380,7 @@ public static class Utils
             CustomRoles.SecurityGuard => Options.SecurityGuardSkillCooldown.GetInt() + (includeDuration ? Options.SecurityGuardSkillDuration.GetInt() : 0),
             CustomRoles.TimeMaster => Options.TimeMasterSkillCooldown.GetInt() + (includeDuration ? Options.TimeMasterSkillDuration.GetInt() : 0),
             CustomRoles.Veteran => Options.VeteranSkillCooldown.GetInt() + (includeDuration ? Options.VeteranSkillDuration.GetInt() : 0),
+            CustomRoles.Rhapsode => Rhapsode.AbilityCooldown.GetInt() + (includeDuration ? Rhapsode.AbilityDuration.GetInt() : 0),
             CustomRoles.Perceiver => Perceiver.CD.GetInt(),
             CustomRoles.Convener => Convener.CD.GetInt(),
             CustomRoles.DovesOfNeace => Options.DovesOfNeaceCooldown.GetInt(),
@@ -2328,7 +2432,7 @@ public static class Utils
         if (loversChat) GameEndChecker.Prefix();
 
         Lovers.IsChatActivated = false;
-        Main.ProcessShapeshifts = true;
+        if (!Options.UseUnshiftTrigger.GetBool()) Main.ProcessShapeshifts = true;
         AFKDetector.NumAFK = 0;
         AFKDetector.PlayerData.Clear();
 
@@ -2352,6 +2456,15 @@ public static class Utils
 
                 if (Options.UsePets.GetBool()) pc.AddAbilityCD(includeDuration: false);
 
+                if (pc.GetCustomRole().SimpleAbilityTrigger() && Options.UseUnshiftTrigger.GetBool() && (!pc.IsNeutralKiller() || Options.UseUnshiftTriggerForNKs.GetBool()))
+                {
+                    var target = Main.AllAlivePlayerControls.Without(pc).RandomElement();
+                    var outfit = pc.Data.DefaultOutfit;
+                    pc.RpcShapeshift(target, false);
+                    Main.CheckShapeshift[pc.PlayerId] = false;
+                    RpcChangeSkin(pc, outfit);
+                }
+
                 AFKDetector.RecordPosition(pc);
 
                 Main.PlayerStates[pc.PlayerId].Role.AfterMeetingTasks();
@@ -2369,6 +2482,8 @@ public static class Utils
 
             Main.CheckShapeshift[pc.PlayerId] = false;
         }
+
+        LateTask.New(() => Main.ProcessShapeshifts = true, 1f, log: false);
 
         CopyCat.ResetRoles();
 
@@ -2490,6 +2605,10 @@ public static class Utils
                 Lawyer.ChangeRoleByTarget(target);
             if (target.Is(CustomRoles.Stained))
                 Stained.OnDeath(target, target.GetRealKiller());
+            if (target.Is(CustomRoles.Spurt))
+            {
+                Spurt.DeathTask(target);
+            }
 
             Postman.CheckAndResetTargets(target, isDeath: true);
             Hitman.CheckAndResetTargets();
@@ -2502,12 +2621,12 @@ public static class Utils
             Scout.OnPlayerDeath(target);
             Adventurer.OnAnyoneDead(target);
             Soothsayer.OnAnyoneDeath(target.GetRealKiller(), target);
+            Amnesiac.OnAnyoneDeath(target);
             EHR.Impostor.Sentry.OnAnyoneMurder(target);
 
             if (QuizMaster.On) QuizMaster.Data.NumPlayersDeadThisRound++;
 
             FixedUpdatePatch.LoversSuicide(target.PlayerId, onMeeting);
-
             if (!target.HasGhostRole())
             {
                 Main.AllPlayerSpeed[target.PlayerId] = Main.RealOptionsData.GetFloat(FloatOptionNames.PlayerSpeedMod);
@@ -2634,8 +2753,8 @@ public static class Utils
         if (taskState.hasTasks)
         {
             var info = GetPlayerInfoById(id);
-            var TaskCompleteColor = HasTasks(info) ? Color.green : Color.cyan; //タスク完了後の色
-            var NonCompleteColor = HasTasks(info) ? Color.yellow : Color.white; //カウントされない人外は白色
+            var TaskCompleteColor = HasTasks(info) ? Color.green : Color.cyan;
+            var NonCompleteColor = HasTasks(info) ? Color.yellow : Color.white;
 
             if (Workhorse.IsThisRole(id))
                 NonCompleteColor = Workhorse.RoleColor;
@@ -2877,5 +2996,5 @@ public static class Utils
 
     public static int AlivePlayersCount(CountTypes countTypes) => Main.AllAlivePlayerControls.Count(pc => pc.Is(countTypes));
 
-    public static bool IsPlayerModClient(this byte id) => Main.PlayerVersion.ContainsKey(GetPlayerById(id).GetClientId());
+    public static bool IsPlayerModClient(this byte id) => Main.PlayerVersion.ContainsKey(id);
 }

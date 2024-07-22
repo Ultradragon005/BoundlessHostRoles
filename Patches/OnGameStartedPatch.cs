@@ -221,7 +221,6 @@ internal class ChangeRoleSettings
             Options.UsedButtonCount = 0;
 
             GameOptionsManager.Instance.currentNormalGameOptions.ConfirmImpostor = false;
-            // if (Options.CurrentGameMode == CustomGameMode.MoveAndStop) GameOptionsManager.Instance.currentNormalGameOptions.NumImpostors = 0;
             Main.RealOptionsData = new(GameOptionsManager.Instance.CurrentGameOptions);
 
             Main.IntroDestroyed = false;
@@ -351,7 +350,7 @@ internal class ChangeRoleSettings
         catch (Exception ex)
         {
             Utils.ErrorEnd("Change Role Setting Postfix");
-            Logger.Fatal(ex.ToString(), "Change Role Setting Postfix");
+            Utils.ThrowException(ex);
         }
     }
 }
@@ -421,8 +420,22 @@ internal class SelectRolesPatch
             {
                 var rd = IRandom.Instance;
                 bool bloodlustSpawn = rd.Next(1, 100) <= (Options.CustomAdtRoleSpawnRate.TryGetValue(CustomRoles.Bloodlust, out var option3) ? option3.GetFloat() : 0) && CustomRoles.Bloodlust.IsEnable();
-                HashSet<byte> bloodlustList = RoleResult.Where(x => x.Value.IsCrewmate() && !x.Value.IsTaskBasedCrewmate() && (Options.UsePets.GetBool() || x.Value.GetRoleTypes() != RoleTypes.Impostor)).Select(x => x.Key.PlayerId).ToHashSet();
+                HashSet<byte> bloodlustList = RoleResult.Where(x => x.Value.IsCrewmate() && !x.Value.IsTaskBasedCrewmate()).Select(x => x.Key.PlayerId).ToHashSet();
                 if (bloodlustList.Count == 0) bloodlustSpawn = false;
+
+                if (Main.AlwaysSpawnTogetherCombos.TryGetValue(OptionItem.CurrentPreset, out var combos) && combos.Values.Any(l => l.Contains(CustomRoles.Bloodlust)))
+                {
+                    var roles = combos.Where(x => x.Value.Contains(CustomRoles.Bloodlust)).Select(x => x.Key).ToHashSet();
+                    var players = RoleResult.Where(x => roles.Contains(x.Value) && x.Value.IsCrewmate() && !x.Value.IsTaskBasedCrewmate()).Select(x => x.Key.PlayerId).ToHashSet();
+                    if (players.Count > 0)
+                    {
+                        bloodlustList = players;
+                        bloodlustSpawn = true;
+                    }
+
+                    combos.Do(x => x.Value.Remove(CustomRoles.Bloodlust));
+                }
+
                 if (Main.SetAddOns.Values.Any(x => x.Contains(CustomRoles.Bloodlust)))
                 {
                     bloodlustSpawn = true;
@@ -449,7 +462,7 @@ internal class SelectRolesPatch
         catch (Exception e)
         {
             Utils.ErrorEnd("Select Role Prefix");
-            Logger.Fatal(e.Message, "Select Role Prefix");
+            Utils.ThrowException(e);
         }
 
         return;
@@ -510,6 +523,21 @@ internal class SelectRolesPatch
             {
                 (CustomRoles addon, (bool SpawnFlag, HashSet<byte> RoleList) value) = roleSpawnMapping.ElementAt(i);
                 if (value.RoleList.Count == 0) value.SpawnFlag = false;
+
+                if (Main.AlwaysSpawnTogetherCombos.TryGetValue(OptionItem.CurrentPreset, out var combos) && combos.Values.Any(l => l.Contains(addon)))
+                {
+                    var roles = combos.Where(x => x.Value.Contains(addon)).Select(x => x.Key).ToHashSet();
+                    var players = RoleResult.Where(x => roles.Contains(x.Value) && x.Value.IsCrewmate() && (addon == CustomRoles.Nimble || x.Value.GetRoleTypes() == RoleTypes.Crewmate) && !IsBasisChangingPlayer(x.Key.PlayerId, CustomRoles.Bloodlust)).Select(x => x.Key.PlayerId).ToHashSet();
+                    if (players.Count > 0)
+                    {
+                        value.RoleList = players;
+                        value.SpawnFlag = true;
+                        roleSpawnMapping[addon] = value;
+                    }
+
+                    combos.Do(x => x.Value.Remove(addon));
+                }
+
                 if (Main.SetAddOns.Values.Any(x => x.Contains(addon)))
                 {
                     value.SpawnFlag = true;
@@ -677,6 +705,7 @@ internal class SelectRolesPatch
 
             // Add-on assignment
             var aapc = Main.AllAlivePlayerControls.Shuffle();
+            if (Main.GM.Value) aapc = aapc.Where(x => x.PlayerId != 0).ToArray();
             var addonNum = aapc.ToDictionary(x => x, _ => 0);
             AddonRolesList
                 .Except(BasisChangingAddons.Keys)
@@ -700,7 +729,6 @@ internal class SelectRolesPatch
                 if (Main.NeverSpawnTogetherCombos.TryGetValue(OptionItem.CurrentPreset, out var neverList) && neverList.TryGetValue(state.MainRole, out var bannedAddonList))
                 {
                     bannedAddonList.ForEach(x => state.RemoveSubRole(x));
-                    continue;
                 }
 
                 if (Main.AlwaysSpawnTogetherCombos.TryGetValue(OptionItem.CurrentPreset, out var alwaysList) && alwaysList.TryGetValue(state.MainRole, out var addonList))
@@ -757,6 +785,7 @@ internal class SelectRolesPatch
                 Asthmatic.Add();
                 Circumvent.Add();
                 Dynamo.Add();
+                Spurt.Add();
                 Lovers.Init();
             }
             catch (Exception e)
@@ -848,7 +877,7 @@ internal class SelectRolesPatch
         catch (Exception ex)
         {
             Utils.ErrorEnd("Select Role Postfix");
-            Logger.Fatal(ex.ToString(), "Select Role Postfix");
+            Utils.ThrowException(ex);
         }
 
         return;

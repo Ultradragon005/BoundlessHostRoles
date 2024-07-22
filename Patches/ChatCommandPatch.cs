@@ -177,7 +177,6 @@ internal static class ChatCommands
     {
         if (__instance.quickChatField.visible) return true;
         if (__instance.freeChatField.textArea.text == string.Empty) return false;
-        if (!GameStates.IsModHost && !AmongUsClient.Instance.AmHost) return true;
         __instance.timeSinceLastMessage = 3f;
 
         var text = __instance.freeChatField.textArea.text;
@@ -298,10 +297,10 @@ internal static class ChatCommands
         }
 
         var splitIndex = Array.IndexOf(args, args.First(x => x.Contains('?'))) + 1;
-        string title = string.Join(" ", args.Take(splitIndex).Skip(1));
+        var title = string.Join(" ", args.Take(splitIndex).Skip(1));
         var answers = args.Skip(splitIndex).ToArray();
 
-        string msg = "";
+        string msg = title + "\n";
         for (int i = 0; i < Math.Clamp(answers.Length, 2, 5); i++)
         {
             char choiceLetter = (char)(i + 65);
@@ -311,7 +310,7 @@ internal static class ChatCommands
         }
 
         msg += $"\n{GetString("Poll.Begin")}\n<size=55%><i>{GetString("Poll.TimeInfo")}</i></size>";
-        Utils.SendMessage(msg, title: title);
+        Utils.SendMessage(msg, title: GetString("Poll.Title"));
 
         Main.Instance.StartCoroutine(StartPollCountdown());
         return;
@@ -538,6 +537,12 @@ internal static class ChatCommands
             return;
         }
 
+        if (!player.IsHost() && !Options.PlayerCanSetColor.GetBool())
+        {
+            Utils.SendMessage(GetString("DisableUseCommand"), player.PlayerId);
+            return;
+        }
+
         string subArgs = args.Length < 2 ? string.Empty : args[1];
         var color = Utils.MsgToColor(subArgs, true);
         if (color == byte.MaxValue)
@@ -713,14 +718,14 @@ internal static class ChatCommands
     private static void SayCommand(ChatController __instance, PlayerControl player, string text, string[] args)
     {
         if (args.Length > 1)
-            Utils.SendMessage(args.Skip(1).Join(delimiter: " "), title: $"<color=#ff0000>{GetString("MessageFromTheHost")}</color>");
+            Utils.SendMessage(args.Skip(1).Join(delimiter: " "), title: $"<color=#ff0000>{GetString(player.IsHost() ? "MessageFromTheHost" : "SayTitle")}</color>");
     }
 
     private static void DeathCommand(ChatController __instance, PlayerControl player, string text, string[] args)
     {
         if (!GameStates.IsInGame) return;
         var killer = player.GetRealKiller();
-        Utils.SendMessage("\n", player.PlayerId, string.Format(GetString("DeathCommand"), Utils.ColorString(Main.PlayerColors.TryGetValue(killer.PlayerId, out var kColor) ? kColor : Color.white, killer.GetRealName()), killer.GetCustomRole().ToColoredString()));
+        Utils.SendMessage("\n", player.PlayerId, string.Format(GetString("DeathCommand"), Utils.ColorString(Main.PlayerColors.TryGetValue(killer.PlayerId, out var kColor) ? kColor : Color.white, killer.GetRealName()), (killer.Is(CustomRoles.Bloodlust) ? CustomRoles.Bloodlust.ToColoredString() : string.Empty) + killer.GetCustomRole().ToColoredString()));
     }
 
     private static void MessageWaitCommand(ChatController __instance, PlayerControl player, string text, string[] args)
@@ -1476,7 +1481,7 @@ internal static class ChatCommands
 
     private static void VersionCommand(ChatController __instance, PlayerControl player, string text, string[] args)
     {
-        string version_text = Main.PlayerVersion.OrderBy(pair => pair.Key).Aggregate(string.Empty, (current, kvp) => current + $"{kvp.Key}:{Main.AllPlayerNames[Utils.GetClientById(kvp.Key).Character.PlayerId]}:{kvp.Value.forkId}/{kvp.Value.version}({kvp.Value.tag})\n");
+        string version_text = Main.PlayerVersion.OrderBy(pair => pair.Key).Aggregate(string.Empty, (current, kvp) => current + $"{kvp.Key}: ({Main.AllPlayerNames[kvp.Key]}) {kvp.Value.forkId}/{kvp.Value.version}({kvp.Value.tag})\n");
         if (version_text != string.Empty) HudManager.Instance.Chat.AddChat(player, (player.FriendCode.GetDevUser().HasTag() ? "\n" : string.Empty) + version_text);
     }
 
@@ -1823,6 +1828,8 @@ internal class ChatUpdatePatch
     public static bool DoBlockChat;
     public static bool LoversMessage;
 
+    private static readonly List<(string Text, byte SendTo, string Title, long SendTimeStamp)> LastMessages = [];
+
     public static void Postfix(ChatController __instance)
     {
         var chatBubble = __instance.chatBubblePool.Prefab.Cast<ChatBubble>();
@@ -1833,6 +1840,8 @@ internal class ChatUpdatePatch
             chatBubble.Background.color = Color.black;
         }
 
+        LastMessages.RemoveAll(x => Utils.TimeStamp - x.SendTimeStamp > 10);
+
         if (!AmongUsClient.Instance.AmHost || Main.MessagesToSend.Count == 0 || (Main.MessagesToSend[0].RECEIVER_ID == byte.MaxValue && Main.MessageWait.Value > __instance.timeSinceLastMessage) || DoBlockChat) return;
 
         var player = Main.AllAlivePlayerControls.MinBy(x => x.PlayerId) ?? Main.AllPlayerControls.MinBy(x => x.PlayerId) ?? PlayerControl.LocalPlayer;
@@ -1841,6 +1850,26 @@ internal class ChatUpdatePatch
         (string msg, byte sendTo, string title) = Main.MessagesToSend[0];
         Main.MessagesToSend.RemoveAt(0);
 
+        SendMessage(player, msg, sendTo, title);
+
+        __instance.timeSinceLastMessage = 0f;
+
+        LastMessages.Add((msg, sendTo, title, Utils.TimeStamp));
+    }
+
+    internal static void SendLastMessages()
+    {
+        var player = Main.AllAlivePlayerControls.MinBy(x => x.PlayerId) ?? Main.AllPlayerControls.MinBy(x => x.PlayerId) ?? PlayerControl.LocalPlayer;
+        if (player == null) return;
+
+        foreach ((string msg, byte sendTo, string title, _) in LastMessages)
+        {
+            SendMessage(player, msg, sendTo, title);
+        }
+    }
+
+    private static void SendMessage(PlayerControl player, string msg, byte sendTo, string title)
+    {
         int clientId = sendTo == byte.MaxValue ? -1 : Utils.GetPlayerById(sendTo).GetClientId();
 
         var name = player.Data.PlayerName;
@@ -1867,8 +1896,6 @@ internal class ChatUpdatePatch
             .EndRpc();
         writer.EndMessage();
         writer.SendMessage();
-
-        __instance.timeSinceLastMessage = 0f;
     }
 }
 

@@ -49,18 +49,13 @@ internal class ControllerManagerUpdatePatch
         {
             try
             {
-                var role = PlayerControl.LocalPlayer.GetCustomRole();
                 var lp = PlayerControl.LocalPlayer;
-                var sb = new StringBuilder();
-                sb.Append(GetString(role.ToString()) + Utils.GetRoleMode(role) + lp.GetRoleInfo(true));
-                if (Options.CustomRoleSpawnChances.TryGetValue(role, out _))
-                    Utils.ShowChildrenSettings(Options.CustomRoleSpawnChances[role], ref sb, command: true, disableColor: false);
-                HudManager.Instance.ShowPopUp(sb.ToString());
+                var role = lp.GetCustomRole();
+                HudManager.Instance.ShowPopUp(GetString(role.ToString()) + Utils.GetRoleMode(role) + lp.GetRoleInfo(true));
             }
             catch (Exception ex)
             {
-                Logger.Exception(ex, "ControllerManagerUpdatePatch");
-                throw;
+                Utils.ThrowException(ex);
             }
         }
 
@@ -72,7 +67,7 @@ internal class ControllerManagerUpdatePatch
                 if (Main.PlayerStates[lp.PlayerId].SubRoles.Count == 0) return;
 
                 AddDes = [];
-                foreach (var subRole in Main.PlayerStates[lp.PlayerId].SubRoles.Where(x => x is not CustomRoles.Charmed))
+                foreach (var subRole in Main.PlayerStates[lp.PlayerId].SubRoles.Where(x => !x.IsConverted()))
                     AddDes.Add(GetString($"{subRole}") + Utils.GetRoleMode(subRole) + GetString($"{subRole}InfoLong"));
 
                 AddonIndex++;
@@ -81,8 +76,24 @@ internal class ControllerManagerUpdatePatch
             }
             catch (Exception ex)
             {
-                Logger.Exception(ex, "ControllerManagerUpdatePatch");
-                throw;
+                Utils.ThrowException(ex);
+            }
+        }
+
+        if (Input.GetKeyDown(KeyCode.F3) && GameStates.InGame && Options.CurrentGameMode == CustomGameMode.Standard)
+        {
+            try
+            {
+                var lp = PlayerControl.LocalPlayer;
+                var role = lp.GetCustomRole();
+                var sb = new StringBuilder();
+                if (Options.CustomRoleSpawnChances.TryGetValue(role, out var soi))
+                    Utils.ShowChildrenSettings(soi, ref sb, command: true, disableColor: false);
+                HudManager.Instance.ShowPopUp(sb.ToString().Trim());
+            }
+            catch (Exception ex)
+            {
+                Utils.ThrowException(ex);
             }
         }
 

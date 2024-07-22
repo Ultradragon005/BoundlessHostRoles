@@ -57,12 +57,18 @@ namespace EHR.Impostor
 
         public override bool OnShapeshift(PlayerControl pc, PlayerControl target, bool shapeshifting)
         {
-            if (shapeshifting && pc.GetAbilityUseLimit() < 1)
+            if (!shapeshifting && !Options.UseUnshiftTrigger.GetBool())
+            {
+                Camouflage.CheckCamouflage();
+                return true;
+            }
+
+            if (pc.GetAbilityUseLimit() < 1)
             {
                 pc.SetKillCooldown(CamouflageDuration.GetFloat() + 1f);
             }
 
-            if (shapeshifting) pc.RpcRemoveAbilityUse();
+            pc.RpcRemoveAbilityUse();
             IsActive = true;
             Camouflage.CheckCamouflage();
 
@@ -82,9 +88,9 @@ namespace EHR.Impostor
 
         public static void IsDead(PlayerControl target)
         {
-            if (!target.Data.IsDead || GameStates.IsMeeting) return;
+            if (!target.IsAlive() || GameStates.IsMeeting) return;
 
-            if (target.Is(CustomRoles.Camouflager) && target.Data.IsDead)
+            if (target.Is(CustomRoles.Camouflager))
             {
                 IsActive = false;
                 Camouflage.CheckCamouflage();

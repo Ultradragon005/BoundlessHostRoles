@@ -49,7 +49,7 @@ public class Main : BasePlugin
     public static bool HasArgumentException;
     public static string CredentialsText;
 
-    public static Dictionary<int, PlayerVersion> PlayerVersion = [];
+    public static Dictionary<byte, PlayerVersion> PlayerVersion = [];
     public static bool ChangedRole = false;
     public static OptionBackupData RealOptionsData;
     public static string HostRealName = string.Empty;
@@ -145,7 +145,6 @@ public class Main : BasePlugin
     public static ConfigEntry<bool> EnableCustomButton { get; private set; }
     public static ConfigEntry<bool> EnableCustomSoundEffect { get; private set; }
     public static ConfigEntry<bool> SwitchVanilla { get; private set; }
-    public static ConfigEntry<bool> VersionCheat { get; private set; }
     public static ConfigEntry<bool> GodMode { get; private set; }
     public static ConfigEntry<bool> DarkTheme { get; private set; }
     public static ConfigEntry<bool> HorseMode { get; private set; }
@@ -236,7 +235,6 @@ public class Main : BasePlugin
         EnableCustomButton = Config.Bind("Client Options", "EnableCustomButton", true);
         EnableCustomSoundEffect = Config.Bind("Client Options", "EnableCustomSoundEffect", true);
         SwitchVanilla = Config.Bind("Client Options", "SwitchVanilla", false);
-        VersionCheat = Config.Bind("Client Options", "VersionCheat", false);
         GodMode = Config.Bind("Client Options", "GodMode", false);
         DarkTheme = Config.Bind("Client Options", "DarkTheme", true);
         HorseMode = Config.Bind("Client Options", "HorseMode", false);
@@ -301,9 +299,9 @@ public class Main : BasePlugin
             {
                 // Vanilla
                 { CustomRoles.Crewmate, "#8cffff" },
-                { CustomRoles.Engineer, "#8cffff" },
-                { CustomRoles.Scientist, "#8cffff" },
-                { CustomRoles.GuardianAngel, "#ffffff" },
+                { CustomRoles.Engineer, "#FF6A00" },
+                { CustomRoles.Scientist, "#8ee98e" },
+                { CustomRoles.GuardianAngel, "#77e6d1" },
                 { CustomRoles.Tracker, "#34ad50" },
                 { CustomRoles.Noisemaker, "#ff4a62" },
                 // Vanilla Remakes
@@ -357,6 +355,9 @@ public class Main : BasePlugin
                 { CustomRoles.Convener, "#34eb7a" },
                 { CustomRoles.Mathematician, "#eb3474" },
                 { CustomRoles.Transmitter, "#c9a11e" },
+                { CustomRoles.Oxyman, "#ffa58c" },
+                { CustomRoles.Rhapsode, "#f5ad42" },
+                { CustomRoles.Chef, "#d6d6ff" },
                 { CustomRoles.Lyncher, "#14ba7d" },
                 { CustomRoles.Socialite, "#32a8a8" },
                 { CustomRoles.Adrenaline, "#ffff00" },
@@ -462,6 +463,7 @@ public class Main : BasePlugin
                 { CustomRoles.HexMaster, "#ff00ff" },
                 { CustomRoles.Wraith, "#4B0082" },
                 { CustomRoles.NSerialKiller, "#233fcc" },
+                { CustomRoles.Beehive, "#ffff00" },
                 { CustomRoles.RouleteGrandeur, "#a88332" },
                 { CustomRoles.Nonplus, "#09632f" },
                 { CustomRoles.Tremor, "#e942f5" },
@@ -562,6 +564,7 @@ public class Main : BasePlugin
                 { CustomRoles.Brakar, "#1447af" },
                 { CustomRoles.Oblivious, "#424242" },
                 { CustomRoles.Bewilder, "#c894f5" },
+                { CustomRoles.Spurt, "#c9e8f5" },
                 { CustomRoles.Sunglasses, "#E7C12B" },
                 { CustomRoles.Workhorse, "#00ffff" },
                 { CustomRoles.Undead, "#ed9abd" },
@@ -771,6 +774,7 @@ public enum CustomWinner
     Necromancer = CustomRoles.Necromancer,
     Wraith = CustomRoles.Wraith,
     SerialKiller = CustomRoles.NSerialKiller,
+    Beehive = CustomRoles.Beehive,
     RouleteGrandeur = CustomRoles.RouleteGrandeur,
     Nonplus = CustomRoles.Nonplus,
     Tremor = CustomRoles.Tremor,

@@ -93,12 +93,9 @@ namespace EHR.Impostor
         {
             bool curse = IsCurseAndKill.TryGetValue(id, out bool wcs) && wcs;
             bool shapeshifting = id.IsPlayerShifted();
-            if (!shapeshifting && !curse)
-                hud.KillButton?.OverrideText(Translator.GetString("WarlockCurseButtonText"));
-            else
-                hud.KillButton?.OverrideText(Translator.GetString("KillButtonText"));
-            if (!shapeshifting && curse)
-                hud.AbilityButton?.OverrideText(Translator.GetString("WarlockShapeshiftButtonText"));
+            if (!shapeshifting && !curse) hud.KillButton?.OverrideText(Translator.GetString("WarlockCurseButtonText"));
+            else hud.KillButton?.OverrideText(Translator.GetString("KillButtonText"));
+            if (!shapeshifting && curse) hud.AbilityButton?.OverrideText(Translator.GetString("WarlockShapeshiftButtonText"));
         }
 
         void ResetCooldowns(bool killCooldown = false, bool curseCooldown = false, bool shapeshiftCooldown = false, PlayerControl warlock = null)
@@ -168,7 +165,7 @@ namespace EHR.Impostor
 
         public override bool OnShapeshift(PlayerControl shapeshifter, PlayerControl target, bool shapeshifting)
         {
-            if (!shapeshifting) return true;
+            if (!shapeshifting && !UseUnshiftTrigger.GetBool()) return true;
 
             Curse(shapeshifter);
 

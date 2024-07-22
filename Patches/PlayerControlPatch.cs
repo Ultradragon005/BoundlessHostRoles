@@ -94,7 +94,7 @@ class CmdCheckMurderPatch
 {
     public static bool Prefix(PlayerControl __instance, [HarmonyArgument(0)] PlayerControl target)
     {
-        if (AmongUsClient.Instance.AmHost && GameStates.IsModHost)
+        if (AmongUsClient.Instance.AmHost)
         {
             __instance.CheckMurder(target);
         }
@@ -627,6 +627,8 @@ class MurderPlayerPatch
 
         Main.PlayerStates[killer.PlayerId].Role.OnMurder(killer, target);
 
+        Chef.SpitOutFood(killer);
+
         if (Options.CurrentGameMode == CustomGameMode.Speedrun) SpeedrunManager.ResetTimer(killer);
 
         if (killer.Is(CustomRoles.TicketsStealer) && killer.PlayerId != target.PlayerId)
@@ -727,11 +729,7 @@ class ShapeshiftPatch
 
         var shapeshifting = shapeshifter.PlayerId != target.PlayerId;
 
-        if (Main.CheckShapeshift.TryGetValue(shapeshifter.PlayerId, out var last) && last == shapeshifting)
-        {
-            // Don't know how you would get here but ok
-            return true;
-        }
+        if (AmongUsClient.Instance.AmHost && shapeshifting && !Rhapsode.CheckAbilityUse(shapeshifter)) return false;
 
         Main.CheckShapeshift[shapeshifter.PlayerId] = shapeshifting;
         Main.ShapeshiftTarget[shapeshifter.PlayerId] = target.PlayerId;
@@ -754,6 +752,8 @@ class ShapeshiftPatch
 
         var role = shapeshifter.GetCustomRole();
         bool forceCancel = role.ForceCancelShapeshift();
+        bool unshiftTrigger = role.SimpleAbilityTrigger() && Options.UseUnshiftTrigger.GetBool() && (!role.IsNeutral() || Options.UseUnshiftTriggerForNKs.GetBool());
+        forceCancel |= unshiftTrigger;
 
         if (shapeshifter.Is(CustomRoles.Camouflager) && !shapeshifting) Camouflager.Reset();
         if (Changeling.ChangedRole.TryGetValue(shapeshifter.PlayerId, out var changed) && changed && shapeshifter.GetRoleTypes() != RoleTypes.Shapeshifter)
@@ -795,7 +795,17 @@ class ShapeshiftPatch
             return false;
         }
 
-        return isSSneeded || (!shouldCancel && !forceCancel) || (!shapeshifting && !shouldAlwaysCancel);
+        if (unshiftTrigger)
+        {
+            var rndTarget = Main.AllAlivePlayerControls.Without(shapeshifter).RandomElement();
+            var outfit = shapeshifter.Data.DefaultOutfit;
+            shapeshifter.RpcShapeshift(rndTarget, false);
+            Main.CheckShapeshift[shapeshifter.PlayerId] = false;
+            RpcChangeSkin(shapeshifter, outfit);
+            NotifyRoles(SpecifySeer: shapeshifter, SpecifyTarget: shapeshifter, NoCache: true);
+        }
+
+        return isSSneeded || (!shouldCancel && !forceCancel) || (!shapeshifting && !shouldAlwaysCancel && !unshiftTrigger);
     }
 
     // Tasks that should run when someone performs a shapeshift (with the egg animation) should be here.
@@ -1081,7 +1091,12 @@ class ReportDeadBodyPatch
 
         LateTask.New(SyncAllSettings, 3f, "SyncAllSettings on meeting start");
 
-        LateTask.New(() => Main.ProcessShapeshifts = false, 5f, log: false);
+        Main.ProcessShapeshifts = false;
+        foreach (var pc in Main.AllAlivePlayerControls)
+        {
+            if (pc.GetCustomRole().SimpleAbilityTrigger() && Options.UseUnshiftTrigger.GetBool() && (!pc.IsNeutralKiller() || Options.UseUnshiftTriggerForNKs.GetBool()))
+                pc.RpcShapeshift(pc, false);
+        }
     }
 }
 
@@ -1099,7 +1114,6 @@ class FixedUpdatePatch
     public static async void Postfix(PlayerControl __instance)
     {
         if (__instance == null || __instance.PlayerId == 255) return;
-        if (!GameStates.IsModHost) return;
 
         byte id = __instance.PlayerId;
         if (AmongUsClient.Instance.AmHost && GameStates.IsInTask && ReportDeadBodyPatch.CanReport[id] && ReportDeadBodyPatch.WaitReport[id].Count > 0)
@@ -1233,6 +1247,12 @@ class FixedUpdatePatch
 
             if (!GameStates.IsLobby)
             {
+                if (player.Is(CustomRoles.Spurt) && !Mathf.Approximately(Main.AllPlayerSpeed[player.PlayerId], Spurt.StartingSpeed[player.PlayerId]) && !inTask && !GameStates.IsMeeting) // fix ludicrous bug
+                {
+                    Main.AllPlayerSpeed[player.PlayerId] = Spurt.StartingSpeed[player.PlayerId];
+                    player.MarkDirtySettings();
+                }
+
                 if (!Main.KillTimers.TryAdd(playerId, 10f) && ((!player.inVent && !player.MyPhysics.Animations.IsPlayingEnterVentAnimation()) || player.Is(CustomRoles.Haste)) && Main.KillTimers[playerId] > 0)
                 {
                     Main.KillTimers[playerId] -= Time.fixedDeltaTime;
@@ -1281,6 +1301,7 @@ class FixedUpdatePatch
                 {
                     var subRoles = playerState.SubRoles;
                     if (subRoles.Contains(CustomRoles.Dynamo)) Dynamo.OnFixedUpdate(player);
+                    if (subRoles.Contains(CustomRoles.Spurt)) Spurt.OnFixedUpdate(player);
                     if (!lowLoad)
                     {
                         if (subRoles.Contains(CustomRoles.Damocles)) Damocles.Update(player);
@@ -1363,7 +1384,7 @@ class FixedUpdatePatch
         {
             if (GameStates.IsLobby)
             {
-                if (Main.PlayerVersion.TryGetValue(player.GetClientId(), out var ver))
+                if (Main.PlayerVersion.TryGetValue(player.PlayerId, out var ver))
                 {
                     if (Main.ForkId != ver.forkId)
                         __instance.cosmetics.nameText.text = $"<color=#ff0000><size=1.2>{ver.forkId}</size>\n{__instance?.name}</color>";
@@ -1807,6 +1828,8 @@ class EnterVentPatch
             Damocles.OnEnterVent(pc.PlayerId, __instance.Id);
         }
 
+        Chef.SpitOutFood(pc);
+
         Main.PlayerStates[pc.PlayerId].Role.OnEnterVent(pc, __instance);
     }
 }
@@ -1839,13 +1862,13 @@ class CoEnterVentPatch
                 LateTask.New(() =>
                 {
                     __instance.myPlayer?.Notify(GetString("FFA-NoVentingBecauseKCDIsUP"), 7f);
-                    __instance.myPlayer?.MyPhysics?.RpcBootFromVent(id);
+                    __instance.RpcBootFromVent(id);
                 }, 0.5f, "FFA-NoVentingWhenKCDIsUP");
                 return true;
             case CustomGameMode.MoveAndStop:
             case CustomGameMode.HotPotato:
             case CustomGameMode.Speedrun:
-                LateTask.New(() => { __instance.myPlayer?.MyPhysics?.RpcBootFromVent(id); }, 0.5f, log: false);
+                LateTask.New(() => __instance.RpcBootFromVent(id), 0.5f, log: false);
                 return true;
             case CustomGameMode.HideAndSeek:
                 HnSManager.OnCoEnterVent(__instance, id);
@@ -1857,14 +1880,20 @@ class CoEnterVentPatch
             LateTask.New(() =>
             {
                 __instance.myPlayer?.Notify(BlockedAction.Vent.GetBlockNotify());
-                __instance.myPlayer?.MyPhysics?.RpcBootFromVent(id);
+                __instance.RpcBootFromVent(id);
             }, 0.5f, "RoleBlockedBootFromVent");
+            return true;
+        }
+
+        if (!Rhapsode.CheckAbilityUse(__instance.myPlayer))
+        {
+            LateTask.New(() => __instance.RpcBootFromVent(id), 0.5f, log: false);
             return true;
         }
 
         if (Penguin.IsVictim(__instance.myPlayer))
         {
-            LateTask.New(() => { __instance.myPlayer?.MyPhysics?.RpcBootFromVent(id); }, 0.5f, "PenguinVictimBootFromVent");
+            LateTask.New(() => __instance.RpcBootFromVent(id), 0.5f, "PenguinVictimBootFromVent");
             return true;
         }
 
@@ -1873,7 +1902,7 @@ class CoEnterVentPatch
             LateTask.New(() =>
             {
                 __instance.myPlayer?.Notify(GetString("SoulHunterTargetNotifyNoVent"));
-                __instance.myPlayer?.MyPhysics?.RpcBootFromVent(id);
+                __instance.RpcBootFromVent(id);
                 LateTask.New(() =>
                 {
                     if (SoulHunter.IsSoulHunterTarget(__instance.myPlayer.PlayerId)) __instance.myPlayer.Notify(string.Format(GetString("SoulHunterTargetNotify"), SoulHunter.GetSoulHunter(__instance.myPlayer.PlayerId).SoulHunter_.GetRealName()), 300f);
@@ -1890,7 +1919,7 @@ class CoEnterVentPatch
                 LateTask.New(() =>
                 {
                     pc?.Notify(GetString("EnteredBlockedVent"));
-                    pc?.MyPhysics?.RpcBootFromVent(id);
+                    __instance.RpcBootFromVent(id);
                 }, 0.5f, "VentguardBlockedVentBootFromVent");
 
                 if (Ventguard.VentguardNotifyOnBlockedVentUse.GetBool())
@@ -1912,7 +1941,7 @@ class CoEnterVentPatch
 
         if (__instance.myPlayer.GetCustomRole().GetDYRole() == RoleTypes.Impostor && !Main.PlayerStates[__instance.myPlayer.PlayerId].Role.CanUseImpostorVentButton(__instance.myPlayer) && Options.CurrentGameMode is CustomGameMode.Standard or CustomGameMode.HideAndSeek && !__instance.myPlayer.Is(CustomRoles.Nimble) && !__instance.myPlayer.Is(CustomRoles.Bloodlust))
         {
-            LateTask.New(() => { __instance.RpcBootFromVent(id); }, 0.5f, "CannotUseVentBootFromVent");
+            LateTask.New(() => __instance.RpcBootFromVent(id), 0.5f, "CannotUseVentBootFromVent");
         }
 
         if (((__instance.myPlayer.Data.Role.Role != RoleTypes.Engineer && !__instance.myPlayer.CanUseImpostorVentButton()) ||
@@ -1922,7 +1951,7 @@ class CoEnterVentPatch
         {
             try
             {
-                LateTask.New(() => { __instance.RpcBootFromVent(id); }, 0.5f, "CannotUseVentBootFromVent2");
+                LateTask.New(() => __instance.RpcBootFromVent(id), 0.5f, "CannotUseVentBootFromVent2");
                 return true;
             }
             catch
@@ -2182,8 +2211,8 @@ class CheckVanishPatch
     {
         Logger.Info($" {__instance.GetNameWithRole()}", "CheckVanish");
         bool allow = Main.PlayerStates[__instance.PlayerId].Role.OnVanish(__instance);
-        if (!allow) __instance.RpcResetAbilityCooldown();
-        return allow;
+        if (!allow) LateTask.New(__instance.RpcResetAbilityCooldown, 0.2f, log: false);
+        return true;
     }
 }
 
@@ -2211,7 +2240,7 @@ public static class PlayerControlMixupOutfitPatch
 
         if (PlayerControl.LocalPlayer.Data.Role.IsImpostor && // Has Impostor role behavior
             !PlayerControl.LocalPlayer.Is(Team.Impostor) && // Not an actual Impostor
-            PlayerControl.LocalPlayer.GetCustomRole().GetDYRole() == RoleTypes.Impostor) // Has Desynced Impostor role
+            PlayerControl.LocalPlayer.GetCustomRole().GetDYRole() is RoleTypes.Impostor or RoleTypes.Shapeshifter or RoleTypes.Phantom) // Has Desynced Impostor role
             __instance.cosmetics.ToggleNameVisible(false);
     }
 }

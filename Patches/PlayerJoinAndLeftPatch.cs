@@ -22,13 +22,10 @@ class OnGameJoinedPatch
     {
         while (!Options.IsLoaded) Task.Delay(1);
         Logger.Info($"{__instance.GameId} joined lobby", "OnGameJoined");
-        if (AmongUsClient.Instance.AmHost) Main.HostClientId = PlayerControl.LocalPlayer.GetClientId();
+        if (AmongUsClient.Instance.AmHost) Main.HostClientId = __instance.ClientId;
         Main.PlayerVersion = [];
-        if (!Main.VersionCheat.Value) RPC.RpcVersionCheck();
+        RPC.RpcVersionCheck();
         SoundManager.Instance?.ChangeAmbienceVolume(DataManager.Settings.Audio.AmbienceVolume);
-
-        if (GameStates.IsModHost)
-            Main.HostClientId = Utils.GetPlayerById(0)?.GetClientId() ?? -1;
 
         ChatUpdatePatch.DoBlockChat = false;
         GameStates.InGame = false;
@@ -118,7 +115,7 @@ static class OnPlayerJoinedPatch
                         return;
                     }
 
-                    if (!Main.PlayerVersion.ContainsKey(client.Id))
+                    if (!Main.PlayerVersion.ContainsKey(client.Character.PlayerId))
                     {
                         var retry = AmongUsClient.Instance.StartRpcImmediately(PlayerControl.LocalPlayer.NetId, (byte)CustomRPC.RequestRetryVersionCheck, SendOption.None, client.Id);
                         AmongUsClient.Instance.FinishRpcImmediately(retry);
@@ -160,7 +157,6 @@ static class OnPlayerJoinedPatch
         }
 
         BanManager.CheckBanPlayer(client);
-        BanManager.CheckDenyNamePlayer(client);
         RPC.RpcVersionCheck();
 
         if (AmongUsClient.Instance.AmHost)
@@ -221,44 +217,44 @@ class OnPlayerLeftPatch
                 PlayerGameOptionsSender.RemoveSender(data.Character);
             }
 
-            if (Main.HostClientId == __instance.ClientId)
-            {
-                const int clientId = -1;
-                var player = PlayerControl.LocalPlayer;
-                var title = "<color=#aaaaff>" + GetString("DefaultSystemMessageTitle") + "</color>";
-                var name = player?.Data?.PlayerName;
-                var msg = string.Empty;
-                if (GameStates.IsInGame)
-                {
-                    Utils.ErrorEnd("Host Left the Game");
-                    msg = GetString("Message.HostLeftGameInGame");
-                }
-                else if (GameStates.IsLobby)
-                    msg = GetString("Message.HostLeftGameInLobby");
-
-                player?.SetName(title);
-                DestroyableSingleton<HudManager>.Instance.Chat.AddChat(player, msg);
-                player?.SetName(name);
-
-                if (player != null && player.Data != null)
-                {
-                    var writer = CustomRpcSender.Create("MessagesToSend");
-                    writer.StartMessage(clientId);
-                    writer.StartRpc(player.NetId, (byte)RpcCalls.SetName)
-                        .Write(player.Data.NetId)
-                        .Write(title)
-                        .EndRpc();
-                    writer.StartRpc(player.NetId, (byte)RpcCalls.SendChat)
-                        .Write(msg)
-                        .EndRpc();
-                    writer.StartRpc(player.NetId, (byte)RpcCalls.SetName)
-                        .Write(player.Data.NetId)
-                        .Write(player.Data.PlayerName)
-                        .EndRpc();
-                    writer.EndMessage();
-                    writer.SendMessage();
-                }
-            }
+            // if (Main.HostClientId == __instance.ClientId)
+            // {
+            //     const int clientId = -1;
+            //     var player = PlayerControl.LocalPlayer;
+            //     var title = "<color=#aaaaff>" + GetString("DefaultSystemMessageTitle") + "</color>";
+            //     var name = player?.Data?.PlayerName;
+            //     var msg = string.Empty;
+            //     if (GameStates.IsInGame)
+            //     {
+            //         Utils.ErrorEnd("Host Left the Game");
+            //         msg = GetString("Message.HostLeftGameInGame");
+            //     }
+            //     else if (GameStates.IsLobby)
+            //         msg = GetString("Message.HostLeftGameInLobby");
+            //
+            //     player?.SetName(title);
+            //     DestroyableSingleton<HudManager>.Instance.Chat.AddChat(player, msg);
+            //     player?.SetName(name);
+            //
+            //     if (player != null && player.Data != null)
+            //     {
+            //         var writer = CustomRpcSender.Create("MessagesToSend");
+            //         writer.StartMessage(clientId);
+            //         writer.StartRpc(player.NetId, (byte)RpcCalls.SetName)
+            //             .Write(player.Data.NetId)
+            //             .Write(title)
+            //             .EndRpc();
+            //         writer.StartRpc(player.NetId, (byte)RpcCalls.SendChat)
+            //             .Write(msg)
+            //             .EndRpc();
+            //         writer.StartRpc(player.NetId, (byte)RpcCalls.SetName)
+            //             .Write(player.Data.NetId)
+            //             .Write(player.Data.PlayerName)
+            //             .EndRpc();
+            //         writer.EndMessage();
+            //         writer.SendMessage();
+            //     }
+            // }
 
             // Additional description of the reason for disconnection
             switch (reason)
@@ -284,7 +280,7 @@ class OnPlayerLeftPatch
             {
                 Main.SayStartTimes.Remove(__instance.ClientId);
                 Main.SayBanwordsTimes.Remove(__instance.ClientId);
-                Main.PlayerVersion.Remove(data?.Id ?? byte.MaxValue);
+                Main.PlayerVersion.Remove(data?.Character?.PlayerId ?? byte.MaxValue);
                 Main.MessagesToSend.RemoveAll(x => x.RECEIVER_ID == data?.Character.PlayerId);
 
                 if (data != null && data.Character != null)
@@ -347,6 +343,13 @@ class InnerNetClientSpawnPatch
                 else TemplateManager.SendTemplate("welcome", client.Character.PlayerId, true);
             }, 3f, "Welcome Message");
 
+            LateTask.New(() =>
+            {
+                if (client.Character == null) return;
+                var sender = AmongUsClient.Instance.StartRpcImmediately(PlayerControl.LocalPlayer.NetId, (byte)CustomRPC.RequestRetryVersionCheck, SendOption.Reliable, client.Character.OwnerId);
+                AmongUsClient.Instance.FinishRpcImmediately(sender);
+            }, 3f, "RPC Request Retry Version Check");
+
             if (GameStates.IsOnlineGame)
             {
                 LateTask.New(() =>
@@ -375,12 +378,6 @@ class InnerNetClientSpawnPatch
 
         if (client != null && client.Character != null) Main.GuessNumber[client.Character.PlayerId] = [-1, 7];
 
-        LateTask.New(() =>
-        {
-            if (client?.Character == null) return;
-            if (Main.OverrideWelcomeMsg != string.Empty) Utils.SendMessage(Main.OverrideWelcomeMsg, client.Character.PlayerId);
-            else TemplateManager.SendTemplate("welcome", client.Character.PlayerId, true);
-        }, 3f, "Welcome Message");
         if (Main.OverrideWelcomeMsg == string.Empty && Main.PlayerStates.Count > 0 && client != null && Main.ClientIdList.Contains(client.Id))
         {
             if (Options.AutoDisplayKillLog.GetBool())
@@ -452,6 +449,8 @@ class PlayerControlCheckNamePatch
     public static void Postfix(PlayerControl __instance, ref string playerName)
     {
         if (!AmongUsClient.Instance.AmHost || !GameStates.IsLobby) return;
+
+        if (BanManager.CheckDenyNamePlayer(__instance, playerName)) return;
 
         if (Main.AllClientRealNames.TryAdd(__instance.OwnerId, playerName))
             RPC.SyncAllClientRealNames();

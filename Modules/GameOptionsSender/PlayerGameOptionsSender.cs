@@ -15,11 +15,11 @@ using Mathf = UnityEngine.Mathf;
 
 namespace EHR.Modules;
 
-public class PlayerGameOptionsSender(PlayerControl player) : GameOptionsSender
+public sealed class PlayerGameOptionsSender(PlayerControl player) : GameOptionsSender
 {
-    public PlayerControl player = player;
+    private PlayerControl player = player;
 
-    public virtual IGameOptions BasedGameOptions =>
+    private static IGameOptions BasedGameOptions =>
         Main.RealOptionsData.Restore(new NormalGameOptionsV08(new UnityLogger().Cast<ILogger>()).Cast<IGameOptions>());
 
     protected override bool IsDirty { get; set; }
@@ -88,7 +88,7 @@ public class PlayerGameOptionsSender(PlayerControl player) : GameOptionsSender
         }
     }
 
-    public void SetDirty() => IsDirty = true;
+    private void SetDirty() => IsDirty = true;
 
     protected override void SendGameOptions()
     {
@@ -259,6 +259,8 @@ public class PlayerGameOptionsSender(PlayerControl player) : GameOptionsSender
                     break;
             }
 
+            Chef.ApplyGameOptionsForOthers(opt, player.PlayerId);
+
             if (Sprayer.LowerVisionList.Contains(player.PlayerId))
             {
                 opt.SetVision(false);
@@ -411,8 +413,11 @@ public class PlayerGameOptionsSender(PlayerControl player) : GameOptionsSender
                 AURoleOptions.ShapeshifterDuration = 1f;
             }
 
-            if (Options.UsePhantomBasis.GetBool() && role.InvisActivatedAbility())
+            if (Options.UsePhantomBasis.GetBool() && role.SimpleAbilityTrigger())
                 AURoleOptions.PhantomDuration = 1f;
+
+            if (Options.UseUnshiftTrigger.GetBool() && role.SimpleAbilityTrigger())
+                AURoleOptions.ShapeshifterDuration = 0f;
 
             // ===================================================================================================================
 
